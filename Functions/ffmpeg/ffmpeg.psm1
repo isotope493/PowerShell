@@ -1,4 +1,4 @@
-    function ffmpeg_TrimFrameExactly_ReturnFile
+    function New-ffmpeg_TrimSegmentFrameExact_ReturnFile
     {
         [CmdletBinding()]
         param (
@@ -48,15 +48,12 @@
     #ffmpeg.exe -err_detect ignore_err -i "$source" -ss $start -t $duration -c copy "$DestinationPath\$OutpuFileNoExtension.$OutputContainer"
 
 
-function ffmpeg_TrimFrameKeyFrameMargins_ReturnFile
+function New-ffmpeg_TrimSegmentWithKeyframeMargins_ReturnFile
 {}
 
-function ffmpeg_ConcatenateClips_ReturnFile
+function New-ffmpeg_ConcatenateClips_ReturnFile
 {}
 
-function ffmpeg_Encode_ReturnFile
-{}
-
-function ffmpeg_Encode_ReturnFile1
+function New-ffmpeg_EncodeClip_ReturnFile
 {}
 

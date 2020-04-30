@@ -1,6 +1,10 @@
 # SYNTAX: Edit-ReturnString_TrimThenSubstring || Edit-ReturnString_TrimThenSubstring [-InputString || Input] <string> [-StartPosition || Start] <string> [[-NumberOfCharacters || NumChars] <string>] [[-EndPosition || End] <string>] [[-DoNotTrim || Trim] <bool>]
 function Edit-ReturnString_TrimThenSubstring
 {
+    # REQUIRED MODULES
+    #
+    # No modules required
+
     # SYNTAX: Edit-ReturnString_TrimThenSubstring || Edit-ReturnString_TrimThenSubstring [-InputString || Input] <string> [-StartPosition || Start] <string> [[-NumberOfCharacters || NumChars] <string>] [[-EndPosition || End] <string>] [[-DoNotTrim || Trim] <bool>]
 
     <#

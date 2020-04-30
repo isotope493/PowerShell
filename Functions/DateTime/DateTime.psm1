@@ -1,6 +1,10 @@
-function Convert-HMS_Time_To_Seconds
+function Convert-HMS_Time_To_Seconds_ReturnDouble
 # Syntax HMS_Time_To_Seconds -inputHMStime HH:MM:SS.sss
 {
+    # REQUIRED MODULES
+    #
+    # No modules required
+
     [CmdletBinding()]
     param 
     (

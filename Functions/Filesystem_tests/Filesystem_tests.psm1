@@ -1,6 +1,6 @@
 # Returns boolean; $true if folder (1) folder already exists or (2) folder doesn't exist but can be created; $false if it CANNOT be created.
-# SYNTAX: Test-ReturnBool_FolderCanBeCreated -TestPath [string]$TestPath
-function Test-ReturnBool_PathHasNotInvalidColons
+# SYNTAX: Test-FolderCanBeCreated_ReturnBool -TestPath [string]$TestPath
+function Test-PathHasNoInvalidColons_ReturnBool
 {
     [CmdletBinding()]
     param (
@@ -26,14 +26,14 @@ function Test-ReturnBool_PathHasNotInvalidColons
     if ($colonCount -gt 1 -or $lastColonPosition -eq 0 -or $lastColonPosition -gt 1) {return $false}
     else {return $true}
 }
-function Test-ReturnBool_FolderCanBeCreated
+function Test-FolderCanBeCreated_ReturnBool
 {
     [CmdletBinding()]
     param
     (
         [Parameter()][string]$TestPath
     )
-    if (!(Test-ReturnBool_PathHasNotInvalidColons "$testPath")) {return $false}
+    if (!(Test-PathHasNoInvalidColons_ReturnBool "$testPath")) {return $false}
     if ((Test-Path -Path "$testPath")) {return $true} 
     elseif (!(Test-Path -Path "$testPath"))
     {
@@ -63,7 +63,7 @@ function Test-ReturnBool_FolderCanBeCreated
     }
 }
 
-function Test-ReturnBool_PathIsWinDriveRoot
+function Test-PathIsWinDriveRoot_ReturnBool
 {
     [CmdletBinding()]
     param
@@ -86,8 +86,13 @@ function Test-ReturnBool_PathIsWinDriveRoot
     else {return $false}
 }
 
-function Get-ReturnString_UniqueAvaliableFolderName
+function Get-UniqueAvaliableFolderName_ReturnString
 {
+    # REQUIRED MODULES
+    # Test-FolderCanBeCreated_ReturnBool
+    #   |-->Test-PathHasNoInvalidColons_ReturnBool
+    # Test-PathIsWinDriveRoot_ReturnBool
+
     [CmdletBinding()]
     param
     (
@@ -222,13 +227,13 @@ function Get-ReturnString_UniqueAvaliableFolderName
 
         if (!(BaseLeading_\\))
         {
-            $isWinDriveRoot=((Test-ReturnBool_PathIsWinDriveRoot "$base"))
+            $isWinDriveRoot=((Test-PathIsWinDriveRoot_ReturnBool "$base"))
         }
         
         # Test if $base folder can be created. In not, $base=".\"
         if (!($isWinDriveRoot) -and ($uncRootIsValid -or !(BaseLeading_\\)))
         {
-            if (!(Test-ReturnBool_FolderCanBeCreated "$base"))
+            if (!(Test-FolderCanBeCreated_ReturnBool "$base"))
             {
                 $base=".\"
             }
@@ -245,7 +250,7 @@ function Get-ReturnString_UniqueAvaliableFolderName
                 $forceUniqueFolder=$true
                 $base=(Resolve-Path .\)
             }    
-            elseif ((Test-ReturnBool_PathIsWinDriveRoot "$base"))
+            elseif ((Test-PathIsWinDriveRoot_ReturnBool "$base"))
             {
                 $forceUniqueFolder=$true
                 $base=(Resolve-Path "$base").path
