@@ -1,66 +1,88 @@
 # (C) Copyright 2020. Brian R. Preston. All Rights Reserved
 
-# Assumes, once the first parameter is identified through start-end delimiters, the value of the parameter immediately follows it and is terminated by the next parameter.
-function Get-ParameterNameAndValuesFromString_ReturnArray
+# Assumes, once the first parameter is identified through start-end delimiters, the value of the parameter immediately follows it and is terminated by the next parameter. This script does not assume the first character of the string is a parameter; it waits for the delimiter indicating the start of a parameter name.
+function Get-MatchedParameterNameAndValuesFromString_ReturnArray
 {
     [CmdletBinding()]
     param
     (
         #region Parameters
+        
+        # Allow user to enter parameters in this command interactively
+        [Parameter()][Alias("Interactive")][string]$EnterParamaters_InThisCommand_WithInteractivePrommpts=$false,
 
         # Input String
         [Parameter(Mandatory=$true)][Alias("Input")][string]$InputString,
 
         # Values to return
-        [Parameter()][Alias("RetParamName")][bool]$ReturnParameterNamesToArray=$true,
-        [Parameter()][Alias("RetParamValues")][bool]$ReturnParameterValuesToArray=$true,
+        [Parameter()][Alias("RetParamNames")][bool]$ReturnArrayOf_ParameterNames=$true,
+        [Parameter()][Alias("RetParamValues")][bool]$ReturnArrayOf_ParameterValues=$true,
 
         # Sorting prefence of array output
-        [Parameter()][Alias("SortParamNames")][bool]$SortParameterNames=$false,
-        [Parameter()][Alias("SortParamValues")][bool]$SortParameterValues=$false,
-        [Parameter()][Alias("SortParamNameTop")][bool]$SortParameterNameThenParameterValues=$True,
+        [Parameter()][Alias("SortParamNames")][bool]$SortOutput_ParameterNames=$false,
+        [Parameter()][Alias("SortParamValues")][bool]$SortOutput_ParameterValues=$false,
+        [Parameter()][Alias("SortParamNameTopOrder")][bool]$SortParameterNameThenParameterValues=$True,
 
-        # Guess delimiters, parameter names, parameter values
-        [Parameter()][Alias("BestGuess")][bool]$BestGuessDelimitersAndTextQualifiers=$null,
+        # Guess delimiters, parameter names, parameter values in not user inputted
+        # If user partially enters these parameters, the rest will be guessed. 
+        [Parameter()][Alias("BestGuess")][bool]$BestGuess_DelimitersAndLiteralQualifiersIn_InputString=$null,
 
         # Are keywords and value free of spaces
         [Parameter()][Alias("ParamNameNoSpaces")][bool]$ParameterNamesIn_InputString_HaveNoSpaces=$null,
         [Parameter()][Alias("ParamValueNoSpaces")][bool]$ParameterValuesIn_InputString_HaveNoSpaces=$null,
 
+        # Universal delimiters and text qualifiers for this command
+        [Parameter()][Alias("UnivDelimInThisCommand")][string]$Universal_DelimiterSeparating_MultipleDelimitersOrLiteralQualifiers_InThisCommand,
+        [Parameter()][Alias("UnivTxtQualInThisCommand")][string]$Universal_LiteralQualifierFor_MultipleDelimitersOrLiteralQualifiers_InThisCommand,
+        [Parameter()][Alias("UnivEscInThisCommand")][string]$Universal_EscapeCharacterFor_MultipleDelimitersOrLiteralQualifiers_InThisCommand,
+
+# Universal delimiters and text qualifiers for this command
+[Parameter()][Alias("UnivDelimInInputStr")][string]$Universal_DelimiterSeparating_MultipleDelimitersOrLiteralQualifiersIn_InputString,
+[Parameter()][Alias("UnivTxtQualInInputStr")][string]$Universal_LiteralQualifierFor_MultipleDelimitersOrLiteralQualifiersIn_InputString,
+[Parameter()][Alias("UnivEscInInputStr")][string]$Universal_EscapeCharacterFor_MultipleDelimitersOrLiteralQualifiersIn_InputString,
+
+        # Text qualifiers (intrepet contents as literal) for start and end of a string; Must start-end delimiters match
+        [Parameter()][Alias("LitQualStart")][string]$LiteralQualifierStringsFor_StartOfLiteralStringIn_InputString=$null,
+        [Parameter()][Alias("LitQualEnd")][string]$LiteralQualifierStringsFor_EndOfLiteralStringIn_InputString=$null,
+        [Parameter()][Alias("LitQualStartEndMatch")][bool]$LiteralQualifierStringsFor_StartAndEndOfLiteralString_MustMatch=$null,
+
+        # Local delimiter, text qualifer, and escape string (singular) for literal qualifiers in the input string
+        [Parameter()][Alias("UnivDelimInThisCommand")][string]$Local_DelimiterSeparating_MultipleDelimitersOrLiteralQualifiersIn_LiteralQualifierStringsForStartAndEndOfLiteralString_InThisCommand,
+
         # Spaces are delimiters unless escaped or text qualified
-        [Parameter()][Alias("SpacesAreDelimExcptIfEsc")][string]$TreatSpacesAsDelimitersUnlessEscapedOrTextQualified=$true,
+        [Parameter()][Alias("SpacesAreDelimExcptIfEsc")][bool]$TreatSpaceAsDelimiter_UnlessEscapedOrQualifiedLiteralStringIn_InputString=$null,
+
+        # Escape special characters (e.g. delimiter, text qualifier) in input string when processing 
+        [Parameter()][Alias("EscStrForLitrlChar")][string]$Universal_StringsIndicating_FollowingCharacterIsLiteralIn_InputString=$null,
+
+        # If two or more escape strings are preceded by and escape string, treat as single escape string
+        # Default is $false; If an escape string follows another, the first character in the second escape string will be a literal
+        [Parameter()][Alias("DblEscStrIsOneEscStr")][bool]$TreatDoubleEscapeStringsOrCharactersAs_SingleEscapeStringOrCharacter=$false,
 
         # Remove strings from input string; processed first 
-        [Parameter()][Alias("RemStrFromInput")][string]$RemoveStringsFrom_InputString=$null,
-        [Parameter()][Alias("RemStrFromInput")][char]$DelimiterCharacterFor_RemoveStringsFrom_InputString=$null,
+        [Parameter()][Alias("RemStrFromInput")][string]$StringsToRemoveFrom_InputString=$null,
+        [Parameter()][Alias("RemStrFromInputDelim")][string]$Local_DelimiterStringSeperating_StringsToRemoveFrom_InputString_InThisCommand=$null,
+        [Parameter()][Alias("RemStrFromInputLitQual")][string]$Local_LiteralQualifierStringFor_StringsToRemoveFrom_InputString=$null,
+        [Parameter()][Alias("RemStrFromInputEscStr")][string]$Local_EscStrFor_StringsToRemoveFrom_InputString=$null,
         [Parameter()][Alias("RemStrSkipFirst")][bool]$IfRemovingStrings_SkipFirstCharacter=$null,
         [Parameter()][Alias("RemStrSkipLast")][bool]$IfRemovingStrings_SkipLastCharacter=$null,          
         
-        # Delimiters for start and end of parameter names
-        [Parameter()][Alias("ParamStartDelim")][String]$DelimitersFor_ParameterNameStart_InInputString=$null,
-        [Parameter()][Alias("ParamEndDelim")][String]$DelimitersFor_ParameterNameEnd_InInputString=$null,
-
-        # Delimiter and text qualifer to separate multiple user delimiters of parameter names; Must start-end delimiters match
-        [Parameter()][Alias("ParamMultiDelims_Delim")][String]$DelimiterSeparating_MultipleStartEndParameterNameDelimiters_InThisCommand=$null,
-        [Parameter()][Alias("ParamMultiDelims_TxtQual")][String]$TextQualifierFor_MultipleStartEndParameterNameDelimiters_InThisCommand=$null,
+        # Delimiters for start and end of parameter names; Must start-end delimiters match
+        [Parameter()][Alias("ParamStartDelim")][String]$DelimiterStringsFor_ParameterNameStart_InInputString=$null,
+        [Parameter()][Alias("ParamEndDelim")][String]$DelimiterStringsFor_ParameterNameEnd_InInputString=$null,
         [Parameter()][Alias("ParamDelimsStartEndMatch")][string]$DelimitersFor_ParameterNameStartAndEnd_MustMatch=$null,
 
-        # Text qualifiers (intrepet contents as literal) for start and end of a string
-        [Parameter()][Alias("TxtQualStart")][string]$TextQualifiersFor_StartOfLiteralString_InInputString=$null,
-        [Parameter()][Alias("TxtQualEnd")][string]$TextQualifiersFor_EndOfLiteralString_InInputString=$null,
+        # Delimiter and text qualifer to separate multiple user delimiters of parameter names
+        [Parameter()][Alias("ParamMultiDelims_Delim")][String]$DelimiterSeparating_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand=$null,
+        [Parameter()][Alias("ParamMultiDelims_LitQual")][String]$LiteralQualifierFor_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand=$null,
+        [Parameter()][Alias("ParamMultiDelims_EscStr")][string]$LocalEscapeStringFor_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand=$null, 
 
-        # Delimiter and text qualifer to separate multiple user inputed text qualifiers; Must start-end delimiters match
-        [Parameter()][Alias("TxtQualMulti_Delim")][string]$DelimiterSeparating_MultipleStartEndTextQualifiers_InThisCommand=$null,
-        [Parameter()][Alias("TxtQualMulti_TxtQual")][string]$TextQualifierFor_MultipleStartEndTextQualifiers_InThisCommand=$null,
-        [Parameter()][Alias("TxtQualStartEndMatch")][string]$TextQualifiersFor_StartAndEndOfLiteralString_MustMatch=$null,
 
-        # Escape special characters (e.g. delimiter, text qualifier) in input string when processing 
-        [Parameter()][Alias("EscStrLiteralChar")][string]$StringIndicating_FollowingCharacterInInputString_IsLiteral=$null,
 
         # Conditions when to ignore escape string
         [Parameter()][Alias("IgnoreEscStrWithinParamName")][bool]$IgnoreNextCharacterIsLiteralIf_WithinParameterName=$null,
         [Parameter()][Alias("IgnoreEscStrWithinParamVal")][bool]$IgnoreNextCharacterIsLiteralIf_WithinParameterValue=$null,
-        [Parameter()][Alias("IgnoreEscStrWithinTxtQualStr")][bool]$IgnoreNextCharacterIsLiteralIf_WithinTextQualifiedString=$null,
+        [Parameter()][Alias("IgnoreEscStrWithinLitQualStr")][bool]$IgnoreNextCharacterIsLiteralIf_WithinQualifiedLiteralStringString=$null,
         [Parameter()][Alias("IgnoreEscStrIfNxtCharNotSpec")][bool]$IgnoreEscapeStringIfNextCharacterIsNotSpecial=$null,
 
 
@@ -143,75 +165,75 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
 
         #region Delimiters for Start of Text Qualifier
 
-        [Parameter()][Alias("TxtQualiferS_BkQuote")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_BackQuote=$null,
-        [Parameter()][Alias("TxtQualiferS_Tilde")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Tilde=$null,
-        [Parameter()][Alias("TxtQualiferS_Exclamation")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Exclamation=$null,
-        [Parameter()][Alias("TxtQualiferS_At")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_AtOrAmpersat=$null,
-        [Parameter()][Alias("TxtQualiferS_Hash")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_PoundOrHash=$null, 
-        [Parameter()][Alias("TxtQualiferS_USD")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_USD=$null,
-        [Parameter()][Alias("TxtQualiferS_Pct")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Percent=$null,
-        [Parameter()][Alias("TxtQualiferS_Caret")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Caret=$null,  
-        [Parameter()][Alias("TxtQualiferS_Ampersand")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Ampersand=$null,
-        [Parameter()][Alias("TxtQualiferS_Asterisk")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Asterisk=$null,
-        [Parameter()][Alias("TxtQualiferS_OpenParen")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_OpenParen=$null,
-        [Parameter()][Alias("TxtQualiferS_CloseParen")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_CloseParen=$null,
-        [Parameter()][Alias("TxtQualiferS_Hypen")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Hyphen=$null,
-        [Parameter()][Alias("TxtQualiferS_Underscore")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Underscore=$null,
-        [Parameter()][Alias("TxtQualiferS_Equal")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Equal=$null,
-        [Parameter()][Alias("TxtQualiferS_Plus")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Plus=$null,
-        [Parameter()][Alias("TxtQualiferS_OpenBracket")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_OpenBracket=$null,
-        [Parameter()][Alias("TxtQualiferS_CloseBracket")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_CloseBracket=$null,
-        [Parameter()][Alias("TxtQualiferS_OpenBrace")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_OpenBrace=$null,
-        [Parameter()][Alias("TxtQualiferS_CloseBrace")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_CloseBrace=$null,
-        [Parameter()][Alias("TxtQualiferS_Comma")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Comma=$null,
-        [Parameter()][Alias("TxtQualiferS_Period")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Period=$null,
-        [Parameter()][Alias("TxtQualiferS_Pipe")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_VerticalBarOrPipe=$null,        
-        [Parameter()][Alias("TxtQualiferS_BkSlash")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_BackSlash=$null,
-        [Parameter()][Alias("TxtQualiferS_FwdSlash")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_ForwardSlash=$null,
-        [Parameter()][Alias("TxtQualiferS_SnglQuote")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_SingleQuote=$null,
-        [Parameter()][Alias("TxtQualiferS_DblQuote")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_DoubleQuote=$null,
-        [Parameter()][Alias("TxtQualiferS_Color")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Colon=$null,
-        [Parameter()][Alias("TxtQualiferS_SemiColon")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_SemiColon=$null,
-        [Parameter()][Alias("TxtQualiferS_LessThan")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_LessThanAngleBracket=$null,
-        [Parameter()][Alias("TxtQualiferS_GreaterThan")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_GreaterThanAngleBracket=$null,
-        [Parameter()][Alias("TxtQualiferS_Question")][bool]$DelimiterFor_TextQualifierStringStart_IsSymbol_Question=$null,
+        [Parameter()][Alias("LitQualiferS_BkQuote")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_BackQuote=$null,
+        [Parameter()][Alias("LitQualiferS_Tilde")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Tilde=$null,
+        [Parameter()][Alias("LitQualiferS_Exclamation")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Exclamation=$null,
+        [Parameter()][Alias("LitQualiferS_At")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_AtOrAmpersat=$null,
+        [Parameter()][Alias("LitQualiferS_Hash")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_PoundOrHash=$null, 
+        [Parameter()][Alias("LitQualiferS_USD")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_USD=$null,
+        [Parameter()][Alias("LitQualiferS_Pct")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Percent=$null,
+        [Parameter()][Alias("LitQualiferS_Caret")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Caret=$null,  
+        [Parameter()][Alias("LitQualiferS_Ampersand")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Ampersand=$null,
+        [Parameter()][Alias("LitQualiferS_Asterisk")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Asterisk=$null,
+        [Parameter()][Alias("LitQualiferS_OpenParen")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_OpenParen=$null,
+        [Parameter()][Alias("LitQualiferS_CloseParen")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_CloseParen=$null,
+        [Parameter()][Alias("LitQualiferS_Hypen")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Hyphen=$null,
+        [Parameter()][Alias("LitQualiferS_Underscore")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Underscore=$null,
+        [Parameter()][Alias("LitQualiferS_Equal")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Equal=$null,
+        [Parameter()][Alias("LitQualiferS_Plus")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Plus=$null,
+        [Parameter()][Alias("LitQualiferS_OpenBracket")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_OpenBracket=$null,
+        [Parameter()][Alias("LitQualiferS_CloseBracket")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_CloseBracket=$null,
+        [Parameter()][Alias("LitQualiferS_OpenBrace")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_OpenBrace=$null,
+        [Parameter()][Alias("LitQualiferS_CloseBrace")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_CloseBrace=$null,
+        [Parameter()][Alias("LitQualiferS_Comma")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Comma=$null,
+        [Parameter()][Alias("LitQualiferS_Period")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Period=$null,
+        [Parameter()][Alias("LitQualiferS_Pipe")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_VerticalBarOrPipe=$null,        
+        [Parameter()][Alias("LitQualiferS_BkSlash")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_BackSlash=$null,
+        [Parameter()][Alias("LitQualiferS_FwdSlash")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_ForwardSlash=$null,
+        [Parameter()][Alias("LitQualiferS_SnglQuote")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_SingleQuote=$null,
+        [Parameter()][Alias("LitQualiferS_DblQuote")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_DoubleQuote=$null,
+        [Parameter()][Alias("LitQualiferS_Color")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Colon=$null,
+        [Parameter()][Alias("LitQualiferS_SemiColon")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_SemiColon=$null,
+        [Parameter()][Alias("LitQualiferS_LessThan")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_LessThanAngleBracket=$null,
+        [Parameter()][Alias("LitQualiferS_GreaterThan")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_GreaterThanAngleBracket=$null,
+        [Parameter()][Alias("LitQualiferS_Question")][bool]$DelimiterFor_LiteralQualifierStringStart_IsSymbol_Question=$null,
 
         #endregion Delimiters for Start of Text Qualifier
 
         #region Delimiters for End of Text Qualifier
 
-        [Parameter()][Alias("TxtQualiferE_BkQuote")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_BackQuote=$null,
-        [Parameter()][Alias("TxtQualiferE_Tilde")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Tilde=$null,
-        [Parameter()][Alias("TxtQualiferE_Exclamation")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Exclamation=$null,
-        [Parameter()][Alias("TxtQualiferE_At")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_AtOrAmpersat=$null,
-        [Parameter()][Alias("TxtQualiferE_Hash")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_PoundOrHash=$null, 
-        [Parameter()][Alias("TxtQualiferE_USD")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_USD=$null,
-        [Parameter()][Alias("TxtQualiferE_Pct")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Percent=$null,
-        [Parameter()][Alias("TxtQualiferE_Caret")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Caret=$null,  
-        [Parameter()][Alias("TxtQualiferE_Ampersand")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Ampersand=$null,
-        [Parameter()][Alias("TxtQualiferE_Asterisk")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Asterisk=$null,
-        [Parameter()][Alias("TxtQualiferE_OpenParen")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_OpenParen=$null,
-        [Parameter()][Alias("TxtQualiferE_CloseParen")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_CloseParen=$null,
-        [Parameter()][Alias("TxtQualiferE_Hypen")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Hyphen=$null,
-        [Parameter()][Alias("TxtQualiferE_Underscore")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Underscore=$null,
-        [Parameter()][Alias("TxtQualiferE_Equal")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Equal=$null,
-        [Parameter()][Alias("TxtQualiferE_Plus")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Plus=$null,
-        [Parameter()][Alias("TxtQualiferE_OpenBracket")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_OpenBracket=$null,
-        [Parameter()][Alias("TxtQualiferE_CloseBracket")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_CloseBracket=$null,
-        [Parameter()][Alias("TxtQualiferE_OpenBrace")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_OpenBrace=$null,
-        [Parameter()][Alias("TxtQualiferE_CloseBrace")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_CloseBrace=$null,
-        [Parameter()][Alias("TxtQualiferE_Comma")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Comma=$null,
-        [Parameter()][Alias("TxtQualiferE_Period")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Period=$null,
-        [Parameter()][Alias("TxtQualiferE_Pipe")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_VerticalBarOrPipe=$null,        
-        [Parameter()][Alias("TxtQualiferE_BkSlash")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_BackSlash=$null,
-        [Parameter()][Alias("TxtQualiferE_FwdSlash")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_ForwardSlash=$null,
-        [Parameter()][Alias("TxtQualiferE_SnglQuote")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_SingleQuote=$null,
-        [Parameter()][Alias("TxtQualiferE_DblQuote")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_DoubleQuote=$null,
-        [Parameter()][Alias("TxtQualiferE_Color")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Colon=$null,
-        [Parameter()][Alias("TxtQualiferE_SemiColon")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_SemiColon=$null,
-        [Parameter()][Alias("TxtQualiferE_LessThan")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_LessThanAngleBracket=$null,
-        [Parameter()][Alias("TxtQualiferE_GreaterThan")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_GreaterThanAngleBracket=$null,
-        [Parameter()][Alias("TxtQualiferE_Question")][bool]$DelimiterFor_TextQualifierStringEnd_IsSymbol_Question=$null,
+        [Parameter()][Alias("LitQualiferE_BkQuote")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_BackQuote=$null,
+        [Parameter()][Alias("LitQualiferE_Tilde")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Tilde=$null,
+        [Parameter()][Alias("LitQualiferE_Exclamation")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Exclamation=$null,
+        [Parameter()][Alias("LitQualiferE_At")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_AtOrAmpersat=$null,
+        [Parameter()][Alias("LitQualiferE_Hash")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_PoundOrHash=$null, 
+        [Parameter()][Alias("LitQualiferE_USD")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_USD=$null,
+        [Parameter()][Alias("LitQualiferE_Pct")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Percent=$null,
+        [Parameter()][Alias("LitQualiferE_Caret")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Caret=$null,  
+        [Parameter()][Alias("LitQualiferE_Ampersand")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Ampersand=$null,
+        [Parameter()][Alias("LitQualiferE_Asterisk")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Asterisk=$null,
+        [Parameter()][Alias("LitQualiferE_OpenParen")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_OpenParen=$null,
+        [Parameter()][Alias("LitQualiferE_CloseParen")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_CloseParen=$null,
+        [Parameter()][Alias("LitQualiferE_Hypen")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Hyphen=$null,
+        [Parameter()][Alias("LitQualiferE_Underscore")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Underscore=$null,
+        [Parameter()][Alias("LitQualiferE_Equal")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Equal=$null,
+        [Parameter()][Alias("LitQualiferE_Plus")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Plus=$null,
+        [Parameter()][Alias("LitQualiferE_OpenBracket")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_OpenBracket=$null,
+        [Parameter()][Alias("LitQualiferE_CloseBracket")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_CloseBracket=$null,
+        [Parameter()][Alias("LitQualiferE_OpenBrace")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_OpenBrace=$null,
+        [Parameter()][Alias("LitQualiferE_CloseBrace")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_CloseBrace=$null,
+        [Parameter()][Alias("LitQualiferE_Comma")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Comma=$null,
+        [Parameter()][Alias("LitQualiferE_Period")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Period=$null,
+        [Parameter()][Alias("LitQualiferE_Pipe")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_VerticalBarOrPipe=$null,        
+        [Parameter()][Alias("LitQualiferE_BkSlash")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_BackSlash=$null,
+        [Parameter()][Alias("LitQualiferE_FwdSlash")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_ForwardSlash=$null,
+        [Parameter()][Alias("LitQualiferE_SnglQuote")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_SingleQuote=$null,
+        [Parameter()][Alias("LitQualiferE_DblQuote")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_DoubleQuote=$null,
+        [Parameter()][Alias("LitQualiferE_Color")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Colon=$null,
+        [Parameter()][Alias("LitQualiferE_SemiColon")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_SemiColon=$null,
+        [Parameter()][Alias("LitQualiferE_LessThan")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_LessThanAngleBracket=$null,
+        [Parameter()][Alias("LitQualiferE_GreaterThan")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_GreaterThanAngleBracket=$null,
+        [Parameter()][Alias("LitQualiferE_Question")][bool]$DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Question=$null,
 
         #endregion Delimiters for End of Text Qualifier
 
@@ -256,37 +278,43 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
 
     #region Variables
 
+    #region Parameter Variables
+
+    # Allow user to enter parameters in this command interactively
+    [Parameter()][Alias("Interactive")][string]$EnterParamaters_InThisCommand_WithInteractivePrommpts=$false,
+
     # [string]$input
     #region Input String: 
     # [Parameter(Mandatory=$true)][Alias("Input")][string]$InputString,
     $input="$InputString" 
     #endregion Input String
 
+
     # [string[]]$retNames [string[]]$retVals
     #region Return Values: 
     # Values to return
-    # [Parameter()][Alias("RetParamName")][bool]$ReturnParameterNamesToArray=$true,
-    # [Parameter()][Alias("RetParamValues")][bool]$ReturnParameterValuesToArray=$true,
-    $retNames=$ReturnParameterNamesToArray
-    $retVals=$ReturnParameterValuesToArray
+    # [Parameter()][Alias("RetParamNames")][bool]$ReturnArrayOf_ParameterNames=$true,
+    # [Parameter()][Alias("RetParamValues")][bool]$ReturnArrayOf_ParameterValues=$true,
+    $retNames=$ReturnArrayOf_ParameterNames
+    $retVals=$ReturnArrayOf_ParameterValues
     #endregion Return Values
 
     # [bool]$sortParamNames [bool]$sortParamVals [bool]$SortParamNamesTop
     #region Return Sort Preferences
     # Sorting prefence of array output
-    # [Parameter()][Alias("SortParamNames")][bool]$SortParameterNames=$false,
-    # [Parameter()][Alias("SortParamValues")][bool]$SortParameterValues=$false,
-    # [Parameter()][Alias("SortParamNameTop")][bool]$SortParameterNameThenParameterValues=$True,
-    $sortParamNames=$SortParameterNames
-    $sortParamVals=$SortParameterValues
+    # [Parameter()][Alias("SortParamNames")][bool]$SortOutput_ParameterNames=$false,
+    # [Parameter()][Alias("SortParamValues")][bool]$SortOutput_ParameterValues=$false,
+    # [Parameter()][Alias("SortParamNameTopOrder")][bool]$SortParameterNameThenParameterValues=$True,
+    $sortParamNames=$SortOutput_ParameterNames
+    $sortParamVals=$SortOutput_ParameterValues
     $SortParamNamesTop=$SortParameterNameThenParameterValues
     #endregion Return Sort Preferences
 
     # [bool]$guess
     #region Guess Delimiters/Content: 
     # Guess delimiters, parameter names, parameter values
-    # [Parameter()][Alias("BestGuess")][bool]$BestGuessDelimitersAndTextQualifiers=$null,
-    $guess=$BestGuessDelimitersAndTextQualifiers
+    # [Parameter()][Alias("BestGuess")][bool]$BestGuess_DelimitersAndLiteralQualifiersIn_InputString=$null,
+    $guess=$BestGuess_DelimitersAndLiteralQualifiersIn_InputString
     #endregion Guess Delimiters/Content
 
     # [bool]$namesNoSpaces [bool]$valuesNoSpaces
@@ -298,104 +326,114 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
     $valuesNoSpaces=$ParameterValuesIn_InputString_HaveNoSpaces
     #endregion Are There Non-delimiting Spaces
 
+    # Universal delimiters and text qualifiers for this command
+    [Parameter()][Alias("UnivDelimInThisCommand")][string]$Universal_DelimiterSeparating_MultipleDelimitersOrLiteralQualifiers_InThisCommand,
+    [Parameter()][Alias("UnivTxtQualInThisCommand")][string]$Universal_LiteralQualifierFor_MultipleDelimitersOrLiteralQualifiers_InThisCommand,
+    [Parameter()][Alias("UnivEscInThisCommand")][string]$Universal_EscapeCharacterFor_MultipleDelimitersOrLiteralQualifiers_InThisCommand,
+
+
+    # [string]$LitQualsStart [string]$LitQualsEnd
+    #region Text Qualifiers for Literal String
+    # Text qualifiers (intrepet contents as literal) for start and end of a string; Must start-end delimiters match
+    # [Parameter()][Alias("LitQualStart")][string]$LiteralQualifierStringsFor_StartOfLiteralStringIn_InputString=$null,
+    # [Parameter()][Alias("LitQualEnd")][string]$LiteralQualifierStringsFor_EndOfLiteralStringIn_InputString=$null,
+    # [Parameter()][Alias("LitQualStartEndMatch")][bool]$LiteralQualifierStringsFor_StartAndEndOfLiteralString_MustMatch=$null,
+    $LitQualsStart="$LiteralQualifierStringsFor_StartOfLiteralStringIn_InputString"
+    $LitQualsEnd="$LiteralQualifierStringsFor_EndOfLiteralStringIn_InputString"
+    $LitQualsStartEndMustMatch=$LiteralQualifierStringsFor_StartAndEndOfLiteralString_MustMatch    
+    #endregion Text Qualifiers for Literal String
+s
     # [bool]$spacesAreDelimExcptEsc
     #region Spaces Are Delimiters Except When Escaped: 
     # Spaces are delimiters unless escaped or text qualified
-    # [Parameter()][Alias("SpacesAreDelimExcptIfEsc")][string]$TreatSpacesAsDelimitersUnlessEscapedOrTextQualified=$true,
-    $spacesAreDelimExcptEsc=$TreatSpacesAsDelimitersUnlessEscapedOrTextQualified
+    # [Parameter()][Alias("SpacesAreDelimExcptIfEsc")][bool]$TreatSpaceAsDelimiter_UnlessEscapedOrQualifiedLiteralStringIn_InputString=$null,
+    $spacesAreDelimExcptEsc=$TreatSpaceAsDelimiter_UnlessEscapedOrQualifiedLiteralStringIn_InputString
     #endregion Spaces Are Delimiters Except When Escaped
+
+    # [string]$literalEscStr
+    #region Literal Escape Character
+    # Escape special characters (e.g. delimiter, text qualifier) in input string when processing 
+    # [Parameter()][Alias("EscStrForLitrlChar")][string]$Universal_StringsIndicating_FollowingCharacterIsLiteralIn_InputString=$null,
+    $literalEscStr="$Universal_StringsIndicating_FollowingCharacterIsLiteralIn_InputString"
+    #endregion Literal Escape Character
+
+    # [bool]$DblEscStrIsOne
+    #region Double Escape Strings
+    # If two or more escape strings are preceded by and escape string, treat as single escape string
+    # Default is $false; If an escape string follows another, the first character in the second escape string will be a literal
+    # [Parameter()][Alias("DblEscStrIsOneEscStr")][bool]$TreatDoubleEscapeStringsOrCharactersAs_SingleEscapeStringOrCharacter=$false,
+    $DblEscStrIsOne=$TreatDoubleEscapeStringsOrCharactersAs_SingleEscapeStringOrCharacter
+    #endregion Double Escape Strings
 
     # [string]$removeStrs [char]$removeStrs_InputDelimChar [bool]$removeStrs_SkipFirstChar [bool]$removeStrs_SkipLastChar
     #region Remove content from input string: 
     # Remove strings from input string; processed first 
-    # [Parameter()][Alias("RemStrFromInput")][string]$RemoveStringsFrom_InputString=$null,
-    # [Parameter()][Alias("RemStrFromInput")][char]$DelimiterCharacterFor_RemoveStringsFrom_InputString=$null,
+    # [Parameter()][Alias("RemStrFromInput")][string]$StringsToRemoveFrom_InputString=$null,
+    # [Parameter()][Alias("RemStrFromInputDelim")][string]$Local_DelimiterStringSeperating_StringsToRemoveFrom_InputString_InThisCommand=$null,
+    # [Parameter()][Alias("RemStrFromInputLitQual")][string]$Local_LiteralQualifierStringFor_StringsToRemoveFrom_InputString=$null,
+    # [Parameter()][Alias("RemStrFromInputEscStr")][string]$Local_EscStrFor_StringsToRemoveFrom_InputString=$null,
     # [Parameter()][Alias("RemStrSkipFirst")][bool]$IfRemovingStrings_SkipFirstCharacter=$null,
     # [Parameter()][Alias("RemStrSkipLast")][bool]$IfRemovingStrings_SkipLastCharacter=$null,  
-    $removeStrs=$RemoveStringsFrom_InputString
-    $removeStrs_InputDelimChar=$DelimiterCharacterFor_RemoveStringsFrom_InputString
+    $removeStrs=$StringsToRemoveFrom_InputString
+    $removeStrs_InputDelimChar=$DelimiterCharacterFor_StringsToRemoveFrom_InputString
+    $removeStrs_LitQual=$LiteralQualifierForUserInputted_StringsToRemoveFrom_InputString
+    $removeStrs_EscChar=$Local_EscStrFor_StringsToRemoveFrom_InputString
     $removeStrs_SkipFirstChar=$IfRemovingStrings_SkipFirstCharacter
     $removeStrs_SkipLastChar=$IfRemovingStrings_SkipLastCharacter
     #endregion Remove content from input string
 
     # [string]$paramDelimsStart [string]$paramDelimsEnd
     #region Delimiters for Param Names Start-End 
-    # Delimiters for start and end of parameter names
-    # [Parameter()][Alias("ParamStartDelim")][String]$DelimitersFor_ParameterNameStart_InInputString=$null,
-    # [Parameter()][Alias("ParamEndDelim")][String]$DelimitersFor_ParameterNameEnd_InInputString=$null,
-    $paramDelimsStart="$DelimitersFor_ParameterNameStart_InInputString"
-    $paramDelimsEnd="$DelimitersFor_ParameterNameEnd_InInputString"
+    # Delimiters for start and end of parameter names; Must start-end delimiters match
+    # [Parameter()][Alias("ParamStartDelim")][String]$DelimiterStringsFor_ParameterNameStart_InInputString=$null,
+    # [Parameter()][Alias("ParamEndDelim")][String]$DelimiterStringsFor_ParameterNameEnd_InInputString=$null,
+        # [Parameter()][Alias("ParamDelimsStartEndMatch")][string]$DelimitersFor_ParameterNameStartAndEnd_MustMatch=$null,
+    $paramDelimsStart="$DelimiterStringsFor_ParameterNameStart_InInputString"
+    $paramDelimsEnd="$DelimiterStringsFor_ParameterNameEnd_InInputString"
+    $paramDelimsStartEndMustMatch=$DelimitersFor_ParameterNameStartAndEnd_MustMatch    
     #endregion Delimiters for Param Names Start-End
 
-    # [string]$paramDelimOfDelims [string]$paramDelimsTxtQual [string]$paramDelimsStartEndMustMatch
-    #region Delim/Txt Qualifier for user inputed delims for Param Names: 
-    # Delimiter and text qualifer to separate multiple user delimiters of parameter names; Must start-end delimiters match
-    # [Parameter()][Alias("ParamMultiDelims_Delim")][String]$DelimiterSeparating_MultipleStartEndParameterNameDelimiters_InThisCommand=$null,
-    # [Parameter()][Alias("ParamMultiDelims_TxtQual")][String]$TextQualifierFor_MultipleStartEndParameterNameDelimiters_InThisCommand=$null,
-    # [Parameter()][Alias("ParamDelimsStartEndMatch")][string]$DelimitersFor_ParameterNameStartAndEnd_MustMatch=$null,
-    $paramDelimOfDelims="$DelimiterSeparating_MultipleStartEndParameterNameDelimiters_InThisCommand"
-    $paramDelimsTxtQual="$TextQualifierFor_MultipleStartEndParameterNameDelimiters_InThisCommand"
-    $paramDelimsStartEndMustMatch=$DelimitersFor_ParameterNameStartAndEnd_MustMatch
-    #endregion Delim/Txt Qualifier for user inputed delims for Param Names
+    # [string]$paramDelimOfDelims [string]$paramDelimsLitQual [string]$paramDelimsEscStr [string]$paramDelimsStartEndMustMatch
+    #region Delim/Txt Qualifier for user inputted delims for Param Names: 
+    # Delimiter and text qualifer to separate multiple user delimiters of parameter names
+    # [Parameter()][Alias("ParamMultiDelims_Delim")][String]$DelimiterSeparating_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand=$null,
+    # [Parameter()][Alias("ParamMultiDelims_LitQual")][String]$LiteralQualifierFor_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand=$null,
+    # [Parameter()][Alias("ParamMultiDelims_EscStr")][string]$LocalEscapeStringFor_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand=$null,
+    $paramDelimOfDelims="$DelimiterSeparating_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand"
+    $paramDelimsLitQual="$LiteralQualifierFor_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand"
+    $paramDelimsEscStr=$LocalEscapeStringFor_DelimiterStringsFor_ParameterNameStart_InInputString_InThisCommand
+    #endregion Delim/Txt Qualifier for user inputted delims for Param Names
 
-    # [string]$txtQualsStart [string]$txtQualsEnd
-    #region Text Qualifiers for Literal String
-    # Text qualifiers (intrepet contents as literal) for start and end of a string
-    # [Parameter()][Alias("TxtQualStart")][string]$TextQualifiersFor_StartOfLiteralString_InInputString=$null,
-    # [Parameter()][Alias("TxtQualEnd")][string]$TextQualifiersFor_EndOfLiteralString_InInputString=$null,
-    $txtQualsStart="$TextQualifiersFor_StartOfLiteralString_InInputString"
-    $txtQualsEnd="$TextQualifiersFor_EndOfLiteralString_InInputString"
-    #endregion Text Qualifiers for Literal String
 
-    # [string]$txtQualsDelim [string]$txtQualsDelimTxtQual [string]$txtQualsStartEndMustMatch
-    #region Delim/Txt Qualifier for User Inputed Text Qualifiers
-    # Delimiter and text qualifer to separate multiple user inputed text qualifiers; Must start-end delimiters match
-    # [Parameter()][Alias("TxtQualMulti_Delim")][string]$DelimiterSeparating_MultipleStartEndTextQualifiers_InThisCommand=$null,
-    # [Parameter()][Alias("TxtQualMulti_TxtQual")][string]$TextQualifierFor_MultipleStartEndTextQualifiers_InThisCommand=$null,
-    # [Parameter()][Alias("TxtQualStartEndMatch")][string]$TextQualifiersFor_StartAndEndOfLiteralString_MustMatch=$null,
-    $txtQualsDelim="$DelimiterSeparating_MultipleStartEndTextQualifiers_InThisCommand"
-    $txtQualsDelimTxtQual="$TextQualifierFor_MultipleStartEndTextQualifiers_InThisCommand"
-    $txtQualsStartEndMustMatch=$TextQualifiersFor_StartAndEndOfLiteralString_MustMatch
-    #endregion Delim/Txt Qualifier for User Inputed Text Qualifiers
 
-    # [string]$literalEscStr
-    #region Literal Escape Character
-    # Escape special characters (e.g. delimiter, text qualifier) in input string when processing 
-    # [Parameter()][Alias("EscStrLiteralChar")][string]$StringIndicating_FollowingCharacterInInputString_IsLiteral=$null,
-    $literalEscStr="$StringIndicating_FollowingCharacterInInputString_IsLiteral"
-    #endregion Literal Escape Character
 
-    # [bool]$ignLitEscStrIfInParamNm [bool]$ignLitEscStrIfInParamVal [bool]$ignLitEscStrIfInTxtQualStr [bool]$ignEscStrIfNxtCharNotSpec
+
+    # [bool]$ignLitEscStrIfInParamNm [bool]$ignLitEscStrIfInParamVal [bool]$ignLitEscStrIfInLitQualStr [bool]$ignEscStrIfNxtCharNotSpec
     #region Ignore Literal Escape Condititions
     # Conditions when to ignore escape string
     # [Parameter()][Alias("IgnoreEscStrWithinParamName")][bool]$IgnoreNextCharacterIsLiteralIf_WithinParameterName=$null,
     # [Parameter()][Alias("IgnoreEscStrWithinParamVal")][bool]$IgnoreNextCharacterIsLiteralIf_WithinParameterValue=$null,
-    # [Parameter()][Alias("IgnoreEscStrWithinTxtQualStr")][bool]$IgnoreNextCharacterIsLiteralIf_WithinTextQualifiedString=$null,
+    # [Parameter()][Alias("IgnoreEscStrWithinLitQualStr")][bool]$IgnoreNextCharacterIsLiteralIf_WithinQualifiedLiteralStringString=$null,
     # [Parameter()][Alias("IgnoreEscStrIfNxtCharNotSpec")][bool]$IgnoreEscapeStringIfNextCharacterIsNotSpecial=$null,
     $ignLitEscStrIfInParamNm=$IgnoreNextCharacterIsLiteralIf_WithinParameterName
     $ignLitEscStrIfInParamVal=$IgnoreNextCharacterIsLiteralIf_WithinParameterValue
-    $ignLitEscStrIfInTxtQualStr=$IgnoreNextCharacterIsLiteralIf_WithinTextQualifiedString
+    $ignLitEscStrIfInLitQualStr=$IgnoreNextCharacterIsLiteralIf_WithinQualifiedLiteralStringString
     $ignEscStrIfNxtCharNotSpec=$IgnoreEscapeStringIfNextCharacterIsNotSpecial
     #endregion Ignore Literal Escape Condititions
 
+    #endregion Parameter Variables
 
-
-
-
-
-
-
-
-
+    #region Arrays for user specified delimiters, text qualifiers, and characters to remove from input string
+    [string]$RemoveStrArr=@()
     [string]$paramDelimsStartArr=@()
     [string]$paramDelimsEndArr=@()
-    [string]$txtQualsStartArr=@()
-    [string]$txtQualsEndArr=@()
-    [string]$RemStrArrArr=@()
+    [string]$LitQualsStartArr=@()
+    [string]$LitQualsEndArr=@()
+    #endregion Arrays for user specified delimiters, text qualifiers, and characters to remove from input string
 
     #endregion Variables
 
-    #region Delimiter and Qualifier parameter booleans to respective arrays
+    #region Assign Delimiter and Qualifier parameter booleans to respective arrays
 
     if ($DelimiterFor_ParameterNameStart_IsSymbol_Space) {$paramDelimsStartArr+=' '}
     if ($DelimiterFor_ParameterNameStart_IsSymbol_BackQuote) {$paramDelimsStartArr+='`'}
@@ -465,114 +503,116 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
     if ($DelimiterFor_ParameterNameEnd_IsSymbol_GreaterThanAngleBracket) {$paramDelimsEndArr+='>'}
     if ($DelimiterFor_ParameterNameEnd_IsSymbol_Question) {$paramDelimsEndArr+='?'}
 
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_BackQuote) {$txtQualsStartArr+='`'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Tilde) {$txtQualsStartArr+='~'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Exclamation) {$txtQualsStartArr+='!'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_AtOrAmpersat) {$txtQualsStartArr+='@'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_PoundOrHash) {$txtQualsStartArr+='#'} 
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_USD) {$txtQualsStartArr+='$'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Percent) {$txtQualsStartArr+='%'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Caret) {$txtQualsStartArr+='^'}  
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Ampersand) {$txtQualsStartArr+='&'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Asterisk) {$txtQualsStartArr+='*'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_OpenParen) {$txtQualsStartArr+='('}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_CloseParen) {$txtQualsStartArr+=')'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Hyphen) {$txtQualsStartArr+='-'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Underscore) {$txtQualsStartArr+='_'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Equal) {$txtQualsStartArr+='='}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Plus) {$txtQualsStartArr+='+'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_OpenBracket) {$txtQualsStartArr+='['}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_CloseBracket) {$txtQualsStartArr+=']'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_OpenBrace) {$txtQualsStartArr+='{'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_CloseBrace) {$txtQualsStartArr+='}'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Comma) {$txtQualsStartArr+=','}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Period) {$txtQualsStartArr+='.'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_VerticalBarOrPipe) {$txtQualsStartArr+='|'}        
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_BackSlash) {$txtQualsStartArr+='\'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_ForwardSlash) {$txtQualsStartArr+='/'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_SingleQuote) {$txtQualsStartArr+="'"}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_DoubleQuote) {$txtQualsStartArr+='"'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Colon) {$txtQualsStartArr+=':'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_SemiColon) {$txtQualsStartArr+=';'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_LessThanAngleBracket) {$txtQualsStartArr+='<'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_GreaterThanAngleBracket) {$txtQualsStartArr+='>'}
-    if ($DelimiterFor_TextQualifierStringStart_IsSymbol_Question) {$txtQualsStartArr+='?'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_BackQuote) {$LitQualsStartArr+='`'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Tilde) {$LitQualsStartArr+='~'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Exclamation) {$LitQualsStartArr+='!'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_AtOrAmpersat) {$LitQualsStartArr+='@'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_PoundOrHash) {$LitQualsStartArr+='#'} 
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_USD) {$LitQualsStartArr+='$'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Percent) {$LitQualsStartArr+='%'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Caret) {$LitQualsStartArr+='^'}  
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Ampersand) {$LitQualsStartArr+='&'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Asterisk) {$LitQualsStartArr+='*'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_OpenParen) {$LitQualsStartArr+='('}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_CloseParen) {$LitQualsStartArr+=')'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Hyphen) {$LitQualsStartArr+='-'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Underscore) {$LitQualsStartArr+='_'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Equal) {$LitQualsStartArr+='='}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Plus) {$LitQualsStartArr+='+'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_OpenBracket) {$LitQualsStartArr+='['}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_CloseBracket) {$LitQualsStartArr+=']'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_OpenBrace) {$LitQualsStartArr+='{'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_CloseBrace) {$LitQualsStartArr+='}'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Comma) {$LitQualsStartArr+=','}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Period) {$LitQualsStartArr+='.'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_VerticalBarOrPipe) {$LitQualsStartArr+='|'}        
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_BackSlash) {$LitQualsStartArr+='\'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_ForwardSlash) {$LitQualsStartArr+='/'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_SingleQuote) {$LitQualsStartArr+="'"}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_DoubleQuote) {$LitQualsStartArr+='"'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Colon) {$LitQualsStartArr+=':'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_SemiColon) {$LitQualsStartArr+=';'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_LessThanAngleBracket) {$LitQualsStartArr+='<'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_GreaterThanAngleBracket) {$LitQualsStartArr+='>'}
+    if ($DelimiterFor_LiteralQualifierStringStart_IsSymbol_Question) {$LitQualsStartArr+='?'}
 
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_BackQuote) {$TxtQualsEndArr+='`'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Tilde) {$TxtQualsEndArr+='~'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Exclamation) {$TxtQualsEndArr+='!'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_AtOrAmpersat) {$TxtQualsEndArr+='@'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_PoundOrHash) {$TxtQualsEndArr+='#'} 
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_USD) {$TxtQualsEndArr+='$'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Percent) {$TxtQualsEndArr+='%'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Caret) {$TxtQualsEndArr+='^'}  
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Ampersand) {$TxtQualsEndArr+='&'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Asterisk) {$TxtQualsEndArr+='*'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_OpenParen) {$TxtQualsEndArr+='('}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_CloseParen) {$TxtQualsEndArr+=')'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Hyphen) {$TxtQualsEndArr+='-'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Underscore) {$TxtQualsEndArr+='_'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Equal) {$TxtQualsEndArr+='='}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Plus) {$TxtQualsEndArr+='+'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_OpenBracket) {$TxtQualsEndArr+='['}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_CloseBracket) {$TxtQualsEndArr+=']'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_OpenBrace) {$TxtQualsEndArr+='{'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_CloseBrace) {$TxtQualsEndArr+='}'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Comma) {$TxtQualsEndArr+=','}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Period) {$TxtQualsEndArr+='.'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_VerticalBarOrPipe) {$TxtQualsEndArr+='|'}        
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_BackSlash) {$TxtQualsEndArr+='\'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_ForwardSlash) {$TxtQualsEndArr+='/'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_SingleQuote) {$TxtQualsEndArr+="'"}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_DoubleQuote) {$TxtQualsEndArr+='"'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Colon) {$TxtQualsEndArr+=':'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_SemiColon) {$TxtQualsEndArr+=';'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_LessThanAngleBracket) {$TxtQualsEndArr+='<'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_GreaterThanAngleBracket) {$TxtQualsEndArr+='>'}
-    if ($DelimiterFor_TextQualifierStringEnd_IsSymbol_Question) {$TxtQualsEndArr+='?'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_BackQuote) {$LitQualsEndArr+='`'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Tilde) {$LitQualsEndArr+='~'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Exclamation) {$LitQualsEndArr+='!'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_AtOrAmpersat) {$LitQualsEndArr+='@'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_PoundOrHash) {$LitQualsEndArr+='#'} 
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_USD) {$LitQualsEndArr+='$'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Percent) {$LitQualsEndArr+='%'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Caret) {$LitQualsEndArr+='^'}  
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Ampersand) {$LitQualsEndArr+='&'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Asterisk) {$LitQualsEndArr+='*'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_OpenParen) {$LitQualsEndArr+='('}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_CloseParen) {$LitQualsEndArr+=')'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Hyphen) {$LitQualsEndArr+='-'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Underscore) {$LitQualsEndArr+='_'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Equal) {$LitQualsEndArr+='='}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Plus) {$LitQualsEndArr+='+'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_OpenBracket) {$LitQualsEndArr+='['}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_CloseBracket) {$LitQualsEndArr+=']'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_OpenBrace) {$LitQualsEndArr+='{'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_CloseBrace) {$LitQualsEndArr+='}'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Comma) {$LitQualsEndArr+=','}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Period) {$LitQualsEndArr+='.'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_VerticalBarOrPipe) {$LitQualsEndArr+='|'}        
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_BackSlash) {$LitQualsEndArr+='\'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_ForwardSlash) {$LitQualsEndArr+='/'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_SingleQuote) {$LitQualsEndArr+="'"}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_DoubleQuote) {$LitQualsEndArr+='"'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Colon) {$LitQualsEndArr+=':'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_SemiColon) {$LitQualsEndArr+=';'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_LessThanAngleBracket) {$LitQualsEndArr+='<'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_GreaterThanAngleBracket) {$LitQualsEndArr+='>'}
+    if ($DelimiterFor_LiteralQualifierStringEnd_IsSymbol_Question) {$LitQualsEndArr+='?'}
 
-    if ($RemoveCharFromString_IsSymbol_Space) {$RemStrArrArr+=' '}
-    if ($RemoveCharFromString_IsSymbol_BackQuote) {$RemStrArrArr+='`'}
-    if ($RemoveCharFromString_IsSymbol_Tilde) {$RemStrArrArr+='~'}
-    if ($RemoveCharFromString_IsSymbol_Exclamation) {$RemStrArrArr+='!'}
-    if ($RemoveCharFromString_IsSymbol_AtOrAmpersat) {$RemStrArrArr+='@'}
-    if ($RemoveCharFromString_IsSymbol_PoundOrHash) {$RemStrArrArr+='#'} 
-    if ($RemoveCharFromString_IsSymbol_USD) {$RemStrArrArr+='$'}
-    if ($RemoveCharFromString_IsSymbol_Percent) {$RemStrArrArr+='%'}
-    if ($RemoveCharFromString_IsSymbol_Caret) {$RemStrArrArr+='^'}  
-    if ($RemoveCharFromString_IsSymbol_Ampersand) {$RemStrArrArr+='&'}
-    if ($RemoveCharFromString_IsSymbol_Asterisk) {$RemStrArrArr+='*'}
-    if ($RemoveCharFromString_IsSymbol_OpenParen) {$RemStrArrArr+='('}
-    if ($RemoveCharFromString_IsSymbol_CloseParen) {$RemStrArrArr+=')'}
-    if ($RemoveCharFromString_IsSymbol_Hyphen) {$RemStrArrArr+='-'}
-    if ($RemoveCharFromString_IsSymbol_Underscore) {$RemStrArrArr+='_'}
-    if ($RemoveCharFromString_IsSymbol_Equal) {$RemStrArrArr+='='}
-    if ($RemoveCharFromString_IsSymbol_Plus) {$RemStrArrArr+='+'}
-    if ($RemoveCharFromString_IsSymbol_OpenBracket) {$RemStrArrArr+='['}
-    if ($RemoveCharFromString_IsSymbol_CloseBracket) {$RemStrArrArr+=']'}
-    if ($RemoveCharFromString_IsSymbol_OpenBrace) {$RemStrArrArr+='{'}
-    if ($RemoveCharFromString_IsSymbol_CloseBrace) {$RemStrArrArr+='}'}
-    if ($RemoveCharFromString_IsSymbol_Comma) {$RemStrArrArr+=','}
-    if ($RemoveCharFromString_IsSymbol_Period) {$RemStrArrArr+='.'}
-    if ($RemoveCharFromString_IsSymbol_VerticalBarOrPipe) {$RemStrArrArr+='|'}        
-    if ($RemoveCharFromString_IsSymbol_BackSlash) {$RemStrArrArr+='\'}
-    if ($RemoveCharFromString_IsSymbol_ForwardSlash) {$RemStrArrArr+='/'}
-    if ($RemoveCharFromString_IsSymbol_SingleQuote) {$RemStrArrArr+="'"}
-    if ($RemoveCharFromString_IsSymbol_DoubleQuote) {$RemStrArrArr+='"'}
-    if ($RemoveCharFromString_IsSymbol_Colon) {$RemStrArrArr+=':'}
-    if ($RemoveCharFromString_IsSymbol_SemiColon) {$RemStrArrArr+=';'}
-    if ($RemoveCharFromString_IsSymbol_LessThanAngleBracket) {$RemStrArrArr+='<'}
-    if ($RemoveCharFromString_IsSymbol_GreaterThanAngleBracket) {$RemStrArrArr+='>'}
-    if ($RemoveCharFromString_IsSymbol_Question) {$RemStrArrArr+='?'}
+    if ($RemoveCharFromString_IsSymbol_Space) {$RemoveStrArr+=' '}
+    if ($RemoveCharFromString_IsSymbol_BackQuote) {$RemoveStrArr+='`'}
+    if ($RemoveCharFromString_IsSymbol_Tilde) {$RemoveStrArr+='~'}
+    if ($RemoveCharFromString_IsSymbol_Exclamation) {$RemoveStrArr+='!'}
+    if ($RemoveCharFromString_IsSymbol_AtOrAmpersat) {$RemoveStrArr+='@'}
+    if ($RemoveCharFromString_IsSymbol_PoundOrHash) {$RemoveStrArr+='#'} 
+    if ($RemoveCharFromString_IsSymbol_USD) {$RemoveStrArr+='$'}
+    if ($RemoveCharFromString_IsSymbol_Percent) {$RemoveStrArr+='%'}
+    if ($RemoveCharFromString_IsSymbol_Caret) {$RemoveStrArr+='^'}  
+    if ($RemoveCharFromString_IsSymbol_Ampersand) {$RemoveStrArr+='&'}
+    if ($RemoveCharFromString_IsSymbol_Asterisk) {$RemoveStrArr+='*'}
+    if ($RemoveCharFromString_IsSymbol_OpenParen) {$RemoveStrArr+='('}
+    if ($RemoveCharFromString_IsSymbol_CloseParen) {$RemoveStrArr+=')'}
+    if ($RemoveCharFromString_IsSymbol_Hyphen) {$RemoveStrArr+='-'}
+    if ($RemoveCharFromString_IsSymbol_Underscore) {$RemoveStrArr+='_'}
+    if ($RemoveCharFromString_IsSymbol_Equal) {$RemoveStrArr+='='}
+    if ($RemoveCharFromString_IsSymbol_Plus) {$RemoveStrArr+='+'}
+    if ($RemoveCharFromString_IsSymbol_OpenBracket) {$RemoveStrArr+='['}
+    if ($RemoveCharFromString_IsSymbol_CloseBracket) {$RemoveStrArr+=']'}
+    if ($RemoveCharFromString_IsSymbol_OpenBrace) {$RemoveStrArr+='{'}
+    if ($RemoveCharFromString_IsSymbol_CloseBrace) {$RemoveStrArr+='}'}
+    if ($RemoveCharFromString_IsSymbol_Comma) {$RemoveStrArr+=','}
+    if ($RemoveCharFromString_IsSymbol_Period) {$RemoveStrArr+='.'}
+    if ($RemoveCharFromString_IsSymbol_VerticalBarOrPipe) {$RemoveStrArr+='|'}        
+    if ($RemoveCharFromString_IsSymbol_BackSlash) {$RemoveStrArr+='\'}
+    if ($RemoveCharFromString_IsSymbol_ForwardSlash) {$RemoveStrArr+='/'}
+    if ($RemoveCharFromString_IsSymbol_SingleQuote) {$RemoveStrArr+="'"}
+    if ($RemoveCharFromString_IsSymbol_DoubleQuote) {$RemoveStrArr+='"'}
+    if ($RemoveCharFromString_IsSymbol_Colon) {$RemoveStrArr+=':'}
+    if ($RemoveCharFromString_IsSymbol_SemiColon) {$RemoveStrArr+=';'}
+    if ($RemoveCharFromString_IsSymbol_LessThanAngleBracket) {$RemoveStrArr+='<'}
+    if ($RemoveCharFromString_IsSymbol_GreaterThanAngleBracket) {$RemoveStrArr+='>'}
+    if ($RemoveCharFromString_IsSymbol_Question) {$RemoveStrArr+='?'}
 
-    #endregion Delimiter and Qualifier parameter booleans to respective arrays
+    #endregion Assign Delimiter and Qualifier parameter booleans to respective arrays
 
+    #region Remove content from input string
+    #region Local Variables for removing content from input string
     $inParamNm=$false
     $inParamVal=$false
 
-    $inTxtQual=$false
-    $currTxtQualStart=$null
-    $currTxtQualEnd=$null
+    $inLitQual=$false
+    $currLitQualStart=$null
+    $currLitQualEnd=$null
 
     $continueOuterLoop=$false
 
@@ -584,26 +624,29 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
     $currParamName=$null
 
     [int32]$indexPosition=0
+    #endregion Local Variables for removing content from input string
 
-
-    # Remove user specificed strings from input string
     if ($null -ne $removeStrs)
     {
-        $remStrArr=@()
-        $newInputString=$null
-        $skipChar=$null
+        # If user entered characters from boolean parameters, they are already populated in [string[]]$RemoveStrArr
+        [string]$newInputString=$null
+        [bool]$skipChar=$null
+        
         $precedingChar=$null
         $counter=0
-        $inTxtQual=$false
+        $inLitQual=$false
+        [char]$delim=$removeStrs_InputDelimChar
+        # Add strings to remove from input string specified in [string]$removeStrs
         foreach ($i in "$removeStrs".ToCharArray())
         {
-            if ($i -eq '"' -and $counter -eq 0) {$inTxtQual=$true; $precedingChar=$i; continue}
-            if ($i -eq '"' -and $counter -eq "$removeStrs".Length) {$inTxtQual=$false; $precedingChar=$i; continue}
-            if ($counter -eq 0 -and !$inTxtQual) {$remStrArr+=$i; $precedingChar=$i; continue}
+            # User can start-end $removeStrs with double quotes for literal string. If so, double quotes and $delim must be escaped
+            if ($i -eq '"' -and $counter -eq 0) {$inLitQual=$true; $precedingChar=$i; continue}
+            if ($i -eq '"' -and $counter -eq "$removeStrs".Length) {$inLitQual=$false; $precedingChar=$i; continue}
+            if ($counter -eq 0 -and !$inLitQual) {$remStrArr+=$i; $precedingChar=$i; continue}
 
-            if ($i -eq ' ' -and $inTxtQual) {$remStrArr+=$i}
+            if ($i -eq ' ' -and $inLitQual) {$remStrArr+=$i}
             elseif ($i -eq ' ' -and $precedingChar -eq ',') {$remStrArr+=$i}
-            elseif ($i -eq '"' -and $inTxtQual) {$remStrArr+=$i}
+            elseif ($i -eq '"' -and $inLitQual) {$remStrArr+=$i}
             elseif ($i -eq ',' -and $precedingChar -eq '\') {$remStrArr+=$i}
             elseif ($precedingChar -eq ',') {$remStrArr+=$i}
         }
@@ -623,6 +666,7 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
         }
         $input=$newInputString
     }
+    #endregion Remove content from input string
 
     # Evaluate user strings for user indicated delimiters and text qualifiers.
     # DO STUFF
@@ -635,7 +679,7 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
         # Literal escape is useful (1) when inside text qualified string to escape a delimiter that would terminate the text qualified literal string or (2) when outside a text qualified string where you want to escape a delimiter that would trigger special meaning (e.g. start of parameter or start of qualified text). The next char will be literally interpreted.
         if (($inParamNm -and $ignLitEscStrIfInParamNm) `
             -or ($inParamVal -and $ignLitEscStrIfInParamVal) `
-            -or ($inTxtQual -and $ignLitEscStrIfInTxtQualStr))
+            -or ($inLitQual -and $ignLitEscStrIfInLitQualStr))
         {
             $nextCharIsLiteral=$false
         }
@@ -644,9 +688,9 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
             $nextCharIsLiteral=$true
             $nextCharIsSpecial=$false
             # If inside TextQualifer AND LiteralStringEscape is triggered, if char following LitStrEsc is not a special character, treat LitStrEsc as literal characters and not an escape string
-            if ($ignEscStrIfNxtCharNotSpec -and $inTxtQual -and !$txtQualsStartEndMustMatch)
+            if ($ignEscStrIfNxtCharNotSpec -and $inLitQual -and !$LitQualsStartEndMustMatch)
             {
-                foreach ($j in $txtQualsStartArr)
+                foreach ($j in $LitQualsStartArr)
                 {
                     if ($j.Length -eq 1 -and $j -eq "$input".Substring($i+$nextCharIsLiteralLen,1))
                     {
@@ -660,18 +704,18 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
                     }
                 }
             }
-            elseif ($ignEscStrIfNxtCharNotSpec -and $inTxtQual -and $txtQualsStartEndMustMatch)
+            elseif ($ignEscStrIfNxtCharNotSpec -and $inLitQual -and $LitQualsStartEndMustMatch)
             {
-                if ("$currTxtQualEnd".Length -eq 1 -and ("$currTxtQualEnd" -eq "$input".ToCharArray()[$i+$nextCharIsLiteralLen]))
+                if ("$currLitQualEnd".Length -eq 1 -and ("$currLitQualEnd" -eq "$input".ToCharArray()[$i+$nextCharIsLiteralLen]))
                 {
                     $nextCharIsSpecial=$true
                 }
-                elseif ("$currTxtQualEnd".Length -gt 1 -and ("$currTxtQualEnd" -eq "$input".Substring($i+$nextCharIsLiteralLen,"$currTxtQualEnd".Length)))
+                elseif ("$currLitQualEnd".Length -gt 1 -and ("$currLitQualEnd" -eq "$input".Substring($i+$nextCharIsLiteralLen,"$currLitQualEnd".Length)))
                 {
                     $nextCharIsSpecial=$true
                 }  
             }            
-            # If inside ParameterName and Not InTxtQualifer AND LiteralStringEscape is triggered, if char following LitStrEsc is not a special character, treat LitStrEsc as literal characters and not an escape string
+            # If inside ParameterName and Not InLitQualifer AND LiteralStringEscape is triggered, if char following LitStrEsc is not a special character, treat LitStrEsc as literal characters and not an escape string
             elseif ($ignEscStrIfNxtCharNotSpec -and $inParamNm -and !$paramDelimsStartEndMustMatch)
             {
                 foreach ($j in "$paramDelimsEndArr")
@@ -707,23 +751,23 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
         }
 
         # Evaluate current position of $input to determine if start of literal string. If $nextCharIsLiteral, skip evaulation
-        if (!$inTxtQual -and !$nextCharIsLiteral)
+        if (!$inLitQual -and !$nextCharIsLiteral)
         {
             $continueOuterLoop=$false
-            foreach ($j in $txtQualsStartArr)
+            foreach ($j in $LitQualsStartArr)
             {
                 if ($j.Length -eq 1 -and $j -eq "$input".Substring($i,1))
                 {
-                    $inTxtQual=$true
-                    if ($txtQualsStartEndMustMatch) {$currTxtQualEnd="$currTxtQualStart"}
+                    $inLitQual=$true
+                    if ($LitQualsStartEndMustMatch) {$currLitQualEnd="$currLitQualStart"}
                     $i++
                     $continueOuterLoop=$true
                     break
                 }
                 elseif ("$j".Length -gt 1 -and $j -eq ("$input".substring($i,"$j".Length)))
                 {
-                    $inTxtQual=$true
-                    if ($txtQualsStartEndMustMatch) {$currTxtQualEnd="$currTxtQualStart"}
+                    $inLitQual=$true
+                    if ($LitQualsStartEndMustMatch) {$currLitQualEnd="$currLitQualStart"}
                     $i=$i+"$j".Length
                     $continueOuterLoop=$true
                     break
@@ -734,41 +778,41 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
         } 
 
         #region End Text Qualifier
-        # Evaluate current position of $input to determine if end of literal string created by $inTxtQual. if $nextCharIsLiteral is true, it  
-        if ($inTxtQual -and !$nextCharIsLiteral -and $txtQualsStartEndMustMatch)
+        # Evaluate current position of $input to determine if end of literal string created by $inLitQual. if $nextCharIsLiteral is true, it  
+        if ($inLitQual -and !$nextCharIsLiteral -and $LitQualsStartEndMustMatch)
         {
-            if ("$currTxtQualEnd".Length -eq 1 -and ("$currTxtQualEnd" -eq "$input".ToCharArray()[$i]))
+            if ("$currLitQualEnd".Length -eq 1 -and ("$currLitQualEnd" -eq "$input".ToCharArray()[$i]))
             {
-                $inTxtQual=$false
+                $inLitQual=$false
                 $i++
                 continue
             }
-            elseif ("$currTxtQualEnd".Length -gt 1 -and ("$currTxtQualEnd" -eq "$input".Substring($i,"$currTxtQualEnd".Length)))
+            elseif ("$currLitQualEnd".Length -gt 1 -and ("$currLitQualEnd" -eq "$input".Substring($i,"$currLitQualEnd".Length)))
             {
-                $inTxtQual=$false
-                $i=$i+"$currTxtQualEnd".Length
+                $inLitQual=$false
+                $i=$i+"$currLitQualEnd".Length
                 continue
             }        
         }
-        elseif ($inTxtQual -and !$nextCharIsLiteral -and !$txtQualsStartEndMustMatch)
+        elseif ($inLitQual -and !$nextCharIsLiteral -and !$LitQualsStartEndMustMatch)
         {
             $continueOuterLoop=$false
-            foreach ($j in $txtQualsEndArr)
+            foreach ($j in $LitQualsEndArr)
             {
                 if ($j.Length -eq 1 -and $j -eq "$input".Substring($i,1))
                 {
-                    $inTxtQual=$false
-                    $currTxtQualEnd=$null
-                    $currTxtQualStart=$null
+                    $inLitQual=$false
+                    $currLitQualEnd=$null
+                    $currLitQualStart=$null
                     $i++
                     $continueOuterLoop=$true
                     break
                 }
                 elseif ("$j".Length -gt 1 -and $j -eq ("$input".substring($i,"$j".Length)))
                 {
-                    $inTxtQual=$false
-                    $currTxtQualEnd=$null
-                    $currTxtQualStart=$null
+                    $inLitQual=$false
+                    $currLitQualEnd=$null
+                    $currLitQualStart=$null
                     $i=$i+"$j".Length
                     $continueOuterLoop=$true
                     break
@@ -779,8 +823,8 @@ function Get-ParameterNameAndValuesFromString_ReturnArray
         }
         #endregion End Text Qualifier
 
-        # After $inTxtQual blocks are evaluated, $nextCharIsLiteral will no longer affect $inTxtQual until next loop. As such, the rest of the logic in the outer loop will treat $inTxtQual and $nextCharAsLiteral as the same. That is, the next charcter will be viewed as a literal. So, to simplify, $nextCharIsLiteral will be used to represent both. However, when the remainder of the loop is finsihed and ready to move on, $nextCharIsLiteral will need to be made $false so that it can be re-evaluated at the start of the loop.
-        if ($inTxtQual) {$nextCharIsLiteral=$true}
+        # After $inLitQual blocks are evaluated, $nextCharIsLiteral will no longer affect $inLitQual until next loop. As such, the rest of the logic in the outer loop will treat $inLitQual and $nextCharAsLiteral as the same. That is, the next charcter will be viewed as a literal. So, to simplify, $nextCharIsLiteral will be used to represent both. However, when the remainder of the loop is finsihed and ready to move on, $nextCharIsLiteral will need to be made $false so that it can be re-evaluated at the start of the loop.
+        if ($inLitQual) {$nextCharIsLiteral=$true}
 
         # Enter if not inside (ParamName OR ParamVal) AND the NextCharIsLiteral.
         # $nextCharIsLiteral is irrelevant since it can't be used to signal start of parameter and, since you are not inside a ParamName or ParamVal, the LiteralChar cannot be added to the value of any output string. It was a pointless literal escape.
